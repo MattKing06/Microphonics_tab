@@ -65,63 +65,65 @@ class MicDisp(Display):
 
         # save the date
         self.startd = datetime.now()
-
         # link up to the secondary display
         self.xfDisp = Display(ui_filename=getPath("MicPlot.ui"))
         self.checkboxes = [self.ui.cb1, self.ui.cb2, self.ui.cb3, self.ui.cb4]
         # create plot canvases and link to GUI elements
-        topPlot = MplCanvas(self, width=20, height=40, dpi=100)
-        botPlot = MplCanvas(self, width=20, height=40, dpi=100)
-        self.xfDisp.ui.PlotTop.addWidget(topPlot)
-        self.xfDisp.ui.PlotBot.addWidget(botPlot)
+        self.topPlot = MplCanvas(self, width=20, height=40, dpi=100)
+        self.botPlot = MplCanvas(self, width=20, height=40, dpi=100)
+        self.initiailise_gui()
+        self.connect_widgets()
 
-        # call function setGOVal when strtBut is pressed
-        self.ui.StrtBut.clicked.connect(partial(self.setGOVal, topPlot, botPlot))
-
-        # call function getOldData when OldDatBut is pressed
-        self.ui.OldDatBut.clicked.connect(partial(self.getOldData, topPlot, botPlot))
-
-        # call function plotWindow when printPushButton is pressed
-        self.xfDisp.ui.printPushButton.clicked.connect(self.plotWindow)
-
-        # call function if cavity select combo box changes
-        self.ui.CavComboBox.activated.connect(self.ChangeCav)
-        self.ui.CMComboBox.currentTextChanged.connect(self.update_cmid)
-        self.ui.CavComboBox.currentIndexChanged.connect(self.update_cavity)
-        self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
-        self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
-
-        # get CM IDs from FFt_math
-        self.CM_IDs = FFt_math.CM_IDs()
-
+    def initiailise_gui(self):
+        self.xfDisp.ui.PlotTop.addWidget(self.topPlot)
+        self.xfDisp.ui.PlotBot.addWidget(self.botPlot)
+        self.model.user_arguments.num_buffers = self.ui.spinBox_buffers.value()
+        self.model.user_arguments.decimation_amount = int(
+            self.ui.comboBox_decimation.currentText()
+        )
+        self.ui.label_samplingrate.setNum(self.model.sampling_rate)
+        self.ui.label_acq_time.setNum(self.model.acquire_time)
         # fill combo boxes
-        for cmid in self.CM_IDs:
+        for cmid in self.model.cryomodules:
             self.ui.CMComboBox.addItem(cmid)
         self.ui.CavComboBox.addItem("Cavities 1-4")
         self.ui.CavComboBox.addItem("Cavities 5-8")
-
         # start out with cavities 1-4 selected
         for idx, cb in enumerate(self.checkboxes):
             cb.setText(str(idx + 1))
 
         # check the first box so there's Something
-        self.ui.cb1.setChecked(True)        # call function if cavity select combo box changes
+        self.ui.cb1.setChecked(True)
+
+    def connect_widgets(self):
+        # call function setGOVal when strtBut is pressed
+        self.ui.StrtBut.clicked.connect(
+            partial(self.setGOVal, self.topPlot, self.botPlot)
+        )
+        # call function getOldData when OldDatBut is pressed
+        self.ui.OldDatBut.clicked.connect(
+            partial(self.getOldData, self.topPlot, self.botPlot)
+        )
+        # call function plotWindow when printPushButton is pressed
+        self.xfDisp.ui.printPushButton.clicked.connect(self.plotWindow)
+        # call function if cavity select combo box changes
+        # call function if cavity select combo box changes
         self.ui.CavComboBox.activated.connect(self.ChangeCav)
         self.ui.CMComboBox.currentTextChanged.connect(self.update_cmid)
         self.ui.CavComboBox.currentIndexChanged.connect(self.update_cavity)
-        self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
-        self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
-        self.update_daq_setting()
-
-    def update_daq_setting(self):
-
-        number_of_buffers = int(self.ui.spinBox_buffers.value())
-        decimation_num = int(self.ui.comboBox_decimation.currentText())
-        sampling_rate = DEFAULT_SAMPLING_RATE / decimation_num
-        self.ui.label_samplingrate.setNum(sampling_rate)
-        self.ui.label_acq_time.setNum(
-            BUFFER_LENGTH * decimation_num * number_of_buffers / DEFAULT_SAMPLING_RATE
+        self.ui.spinBox_buffers.valueChanged.connect(self.update_number_of_buffers)
+        self.ui.comboBox_decimation.currentTextChanged.connect(
+            self.update_decimation_amount
         )
+
+    def update_number_of_buffers(self, value: int) -> None:
+        self.model.user_arguments.num_buffers = value
+        self.ui.label_acq_time.setNum(self.model.acquire_time)
+
+    def update_decimation_amount(self, value: str) -> None:
+        self.model.user_arguments.decimation_amount = int(value)
+        self.ui.label_samplingrate.setNum(self.model.sampling_rate)
+        self.ui.label_acq_time.setNum(self.model.acquire_time)
 
     def update_cmid(self, cmid: str) -> None:
         self.model.user_arguments.cryomodule_id = cmid
@@ -170,8 +172,6 @@ class MicDisp(Display):
                 self.model.user_arguments.cavity_number_list += cav_num
         self.model.set_new_location()
         LASTPATH = self.model.save_location
-        print("User Args: ", self.model.user_arguments.__dict__)
-        print(self.model.save_location)
         return (
             self.model.user_arguments.linac,
             self.model.user_arguments.cryomodule,
@@ -186,6 +186,8 @@ class MicDisp(Display):
         global LASTPATH
         return_code = 2
 
+        self.model.set_new_location()
+        LASTPATH = self.model.save_location
         # reads GUI inputs, fills out LASTPATH, and returns LxB, CMxx, and cav num
         linac, cmNumSt, cavNumStr = self.getUserVal()
 
@@ -206,29 +208,30 @@ class MicDisp(Display):
         # /u1/lcls/physics/rf_lcls2/microphonics/ACCL_L0B_0100/yyyy/mm/dd/
         # LASTPATH =  path.join(morPath, botPath)
         # get LASTPATH from getUserVal()
-        makedirs(LASTPATH, exist_ok=True)
+        # makedirs(LASTPATH, exist_ok=True)
 
-        numbWaveF = str(self.ui.spinBox_buffers.value())
+        # numbWaveF = str(self.model.user_arguments.num_buffers)
 
-        decimation_str = str(self.ui.comboBox_decimation.currentText())
+        # decimation_str = str(self.model.user_arguments.decimation_amount)
 
         # LASTPATH is the directory to put the datafile compliments of getUserVal()
         # Need to make output file name
         # Sergio had res_cav#_c#_yyyymmdd_hhmmss
         # Go to res_cm##_cav####_c#_yyyymmdd_hhmmss
 
-        timestamp = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
-        outFile = (
-            "res_CM"
-            + cmNumSt
-            + "_cav"
-            + cavNumStr
-            + "_c"
-            + str(numbWaveF)
-            + "_"
-            + timestamp
-        )
-        self.filNam = outFile
+        # timestamp = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
+        # outFile = (
+        #     "res_CM"
+        #     + cmNumSt
+        #     + "_cav"
+        #     + cavNumStr
+        #     + "_c"
+        #     + str(numbWaveF)
+        #     + "_"
+        #     + timestamp
+        # )
+        self.model.set_new_outfile()
+        self.filNam = self.model.outfile_name
 
         cmdList = [
             "python",
@@ -238,39 +241,50 @@ class MicDisp(Display):
             "-a",
             caCmd,
             "-wsp",
-            decimation_str,
+            str(self.model.user_arguments.decimation_amount),
             "-acav",
         ]
         for cav in cavNumStr:
             cmdList += cav
-        cmdList += ["-ch", "DF", "-c", numbWaveF, "-F", outFile]
+        cmdList += [
+            "-ch",
+            "DF",
+            "-c",
+            self.model.user_arguments.num_buffers,
+            "-F",
+            self.model.outfile_name,
+        ]
         print(cmdList)
+        self.model.construct_args()
+        print("*** ", self.model.daq.args)
 
         try:
             self.ui.label_message.setText("Data acquisition started\n")
             self.ui.label_message.repaint()
-            process = subprocess.Popen(
-                cmdList, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            out, err = process.communicate()
-            return_code = process.poll()
-            print("Return code {}".format(return_code))
-            out = out.decode(sys.stdin.encoding)
-            err = err.decode(sys.stdin.encoding)
-            print("Out: {}".format(out))
-            if len(err) > 0:
-                print("Err: {}".format(err))
-            self.ui.label_message.setText("{}".format(out))
+            # process = subprocess.Popen(
+            # cmdList, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            # )
+            # out, err = process.communicate()
+            # return_code = process.poll()
+            # print("Return code {}".format(return_code))
+            # out = out.decode(sys.stdin.encoding)
+            # err = err.decode(sys.stdin.encoding)
+            # print("Out: {}".format(out))
+            self.model.run()
+
+            self.ui.label_message.setText("{}".format(self.model.daq.output))
             self.ui.label_message.repaint()
 
-            if return_code == 0:
-                self.ui.label_message.setText("File saved at \n" + LASTPATH)
+            if self.model.daq.return_code == 0:
+                self.ui.label_message.setText(
+                    "File saved at \n" + self.model.save_location
+                )
                 self.ui.label_message.repaint()
 
                 # user requesting that plots be made
                 if self.ui.PlotComboBox.currentIndex() == 0:
                     try:
-                        fname = path.join(LASTPATH, outFile)
+                        fname = path.join(LASTPATH, self.model.outfile_name)
                         if path.exists(fname):
                             self.getDataBack(fname, tPlot, bPlot)
                         else:
@@ -278,7 +292,7 @@ class MicDisp(Display):
                     except:
                         print(
                             "No data file found in {} to make plots from".format(
-                                LASTPATH
+                                self.model.save_location
                             )
                         )
 
@@ -286,8 +300,10 @@ class MicDisp(Display):
             else:
                 print("return code is not 0")
 
-                e = subprocess.CalledProcessError(return_code, cmdList, output=out)
-                e.stdout, e.stderr = out, err
+                e = subprocess.CalledProcessError(
+                    return_code, cmdList, output=self.model.daq.output
+                )
+                e.stdout, e.stderr = self.model.daq.output, self.model.daq.error
                 self.ui.label_message.setText(
                     "Call to microphonics script failed \nreturn code: {}\nstderr: {}".format(
                         return_code, str(e.stderr)
@@ -322,7 +338,9 @@ class MicDisp(Display):
 
         # fileDial is fun to say
         fileDial = QFileDialog()
-        fname_tuple = fileDial.getOpenFileName(None, "Open File?", LASTPATH, "")
+        fname_tuple = fileDial.getOpenFileName(
+            None, "Open File?", self.model.save_location, ""
+        )
         if fname_tuple[0] != "":
             self.getDataBack(fname_tuple[0], tPlot, bPlot)
 

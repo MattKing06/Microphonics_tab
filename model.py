@@ -1,86 +1,53 @@
-import os
 from datetime import datetime
+from math import log2, floor, ceil
+import os
+import subprocess
+import sys
+from typing import Union
 
 
-class UserArgs:
-    def __init__(self):
-        # cavNumA/B are '1 2 3 4' with spaces in between for
-        #  script call
-        # cavNumStr is '1234' for filename
-        self._cavity_number_str = ""
-        self._cavity_number_list = list()
-        self._cryomodule_str = ""
-        self._cmid = ""
-        self._linac = ""
-        self._rack = -1
-        self._rack_delta = -1
-
-    @property
-    def cavity_number_str(self) -> str:
-        return self._cavity_number_str
-
-    @cavity_number_str.setter
-    def cavity_number_str(self, value: str) -> None:
-        self._cavity_number_str = value
-
-    @property
-    def cavity_number_list(self) -> list:
-        return self._cavity_number_list
-
-    @cavity_number_list.setter
-    def cavity_number_list(self, value: list) -> None:
-        self._cavity_number_list = value
-
-    @property
-    def cryomodule(self) -> str:
-        return self._cryomodule_str
-
-    @cryomodule.setter
-    def cryomodule(self, value: str) -> None:
-        self._cryomodule_str = value
-
-    @property
-    def cryomodule_id(self) -> str:
-        return self._cmid
-
-    @cryomodule_id.setter
-    def cryomodule_id(self, value: str) -> None:
-        self._cmid = value
-
-    @property
-    def linac(self) -> str:
-        return self._linac
-
-    @linac.setter
-    def linac(self, value: str) -> None:
-        self._linac = value
-
-    @property
-    def rack(self) -> int:
-        return self._rack
-
-    @rack.setter
-    def rack(self, value: int) -> None:
-        self._rack = value
-
-    @property
-    def rack_delta(self) -> int:
-        return self._rack_delta
-
-    @rack_delta.setter
-    def rack_delta(self, value: int) -> None:
-        self._rack_delta = value
+BUFFER_LENGTH = 16384
+DEFAULT_SAMPLING_RATE = 2000
 
 
 class Model:
-    user_arguments: UserArgs
-
     def __init__(self):
         self.name = "model"
         self.user_arguments = UserArgs()
         self._save_root_location = ""
         self._save_location = ""
+        self._output_filename = ""
         self._start_date = datetime.now()
+        self.daq = DAQProcess()
+
+    @property
+    def sampling_rate(self) -> float:
+        return DEFAULT_SAMPLING_RATE / self.user_arguments.decimation_amount
+
+    @property
+    def acquire_time(self):
+        return (
+            BUFFER_LENGTH
+            * self.user_arguments.decimation_amount
+            * self.user_arguments.num_buffers
+            / DEFAULT_SAMPLING_RATE
+        )
+
+    @property
+    def process_return_code(self):
+        return self._process_return_code
+
+    @property
+    def process_output(self):
+        return self._process_output
+
+    @property
+    def process_err(self):
+        return self._process_err
+
+    def run(self):
+        self.daq.construct_args()
+        self.daq.run()
 
     @property
     def cryomodules(self) -> list:
@@ -128,6 +95,7 @@ class Model:
     @property
     def start_date(self) -> datetime:
         return self._start_date
+
     @property
     def save_location(self):
         return self._save_location
@@ -152,6 +120,27 @@ class Model:
         #    )
         self._save_root_location = path
 
+    @property
+    def outfile_name(self) -> str:
+        return self._output_filename
+
+    @outfile_name.setter
+    def outfile_name(self, file: str):
+        self._output_filename = file
+
+    def set_new_outfile(self):
+        timestamp = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
+        self.outfile_name = (
+            "res_CM"
+            + self.user_arguments.cryomodule
+            + "_cav"
+            + self.user_arguments.cavity_number_str
+            + "_c"
+            + str(self.user_arguments.num_buffers)
+            + "_"
+            + timestamp
+        )
+
     def set_new_location(self):
         # Make the path name to be nice:
         # LASTPATH=DATA_DIR_PATH+'ACCL_'+liNac+'_'+cmNumStr+cavNumStr[0]+'0'
@@ -169,3 +158,202 @@ class Model:
         day = "%02d" % self.start_date.day
         self.save_location = os.path.join(self.save_location, year, month, day)
 
+    def construct_args(self):
+        caCmd = (
+            "ca://ACCL:"
+            + self.user_arguments.linac
+            + ":"
+            + str(self.user_arguments.cryomodule)
+            + "00:RES"
+            + self.user_arguments.rack_str
+            + ":"
+        )
+        self.daq.construct_args(
+            out_location=self.save_location,
+            ca_command=caCmd,
+            decimation=self.user_arguments.decimation_amount,
+            cavities=self.user_arguments.cavity_number_list,
+            buffer_number=self.user_arguments.num_buffers,
+            outfile=self.outfile_name,
+        )
+
+
+class DAQProcess:
+    def __init__(self):
+        self._return_code = 0
+        self._output = ""
+        self._error = ""
+        self._script = (
+            "/usr/local/lcls/package/lcls2_llrf/srf/software/res_ctl/res_data_acq.py"
+        )
+        self._args = []
+
+    def construct_args(
+        self, out_location, ca_command, decimation, cavities, buffer_number, outfile
+    ):
+        self._args = [
+            "python",
+            self._script,
+            "-D",
+            str(out_location),
+            "-a",
+            ca_command,
+            "-wsp",
+            decimation,
+            "-acav",
+        ]
+        for cavity_number in cavities:
+            self._args += str(cavity_number)
+        self.args += [
+            "-ch",
+            "DF",
+            "-c",
+            buffer_number,
+            "-F",
+            outfile,
+        ]
+
+    def run(self):
+        process = subprocess.Popen(
+            self.args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        self.output, self.error = process.communicate()
+        self.return_code = process.poll()
+        print("Return code: ", self.return_code)
+        print("Out: ", self.output)
+        if len(self.error) > 0:
+            print("Err: ", self.error)
+
+    @property
+    def return_code(self):
+        return self._return_code
+
+    @property
+    def output(self):
+        return self._output
+
+    @output.setter
+    def output(self, value: Union[str, bytes]) -> None:
+        if isinstance(value, bytes):
+            self._output = value.decode(sys.stdin.encoding)
+        elif isinstance(value, str):
+            self._output = value
+
+    @property
+    def error(self) -> str:
+        return self._error
+
+    @error.setter
+    def error(self, value: Union[str, bytes]) -> None:
+        if isinstance(value, bytes):
+            self._error = value.decode(sys.stdin.encoding)
+        elif isinstance(value, str):
+            self._error = value
+
+    @property
+    def script(self) -> str:
+        return self._script
+
+    @property
+    def args(self) -> list:
+        return self._args
+
+    @args.setter
+    def args(self, args: list) -> None:
+        self._args = args
+
+
+class UserArgs:
+    def __init__(self):
+        # cavNumA/B are '1 2 3 4' with spaces in between for
+        #  script call
+        # cavNumStr is '1234' for filename
+        self._cavity_number_str = ""
+        self._cavity_number_list = list()
+        self._cryomodule_str = ""
+        self._cmid = ""
+        self._linac = ""
+        self._rack = -1
+        self._rack_delta = -1
+        self._n_buffers = -1
+        self._decimation = -1
+
+    @property
+    def cavity_number_str(self) -> str:
+        return self._cavity_number_str
+
+    @cavity_number_str.setter
+    def cavity_number_str(self, value: str) -> None:
+        self._cavity_number_str = value
+
+    @property
+    def cavity_number_list(self) -> list:
+        return self._cavity_number_list
+
+    @cavity_number_list.setter
+    def cavity_number_list(self, value: list) -> None:
+        self._cavity_number_list = value
+
+    @property
+    def cryomodule(self) -> str:
+        return self._cryomodule_str
+
+    @cryomodule.setter
+    def cryomodule(self, value: str) -> None:
+        self._cryomodule_str = value
+
+    @property
+    def cryomodule_id(self) -> str:
+        return self._cmid
+
+    @cryomodule_id.setter
+    def cryomodule_id(self, value: str) -> None:
+        self._cmid = value
+
+    @property
+    def num_buffers(self) -> str:
+        return self._n_buffers
+
+    @num_buffers.setter
+    def num_buffers(self, value: str) -> None:
+        self._n_buffers = value
+
+    @property
+    def decimation_amount(self):
+        return self._decimation
+
+    @decimation_amount.setter
+    def decimation_amount(self, value):
+        # only powers of 2.
+        if ceil(log2(value)) != floor(log2(value)):
+            print("Only able to set decimation to powers of 2.")
+            return
+        self._decimation = value
+
+    @property
+    def linac(self) -> str:
+        return self._linac
+
+    @linac.setter
+    def linac(self, value: str) -> None:
+        self._linac = value
+
+    @property
+    def rack(self) -> int:
+        return self._rack
+
+    @property
+    def rack_str(self) -> str:
+        return "B" if self.rack else "A"
+
+    @rack.setter
+    def rack(self, value: int) -> None:
+        self._rack = value
+
+    @property
+    def rack_delta(self) -> int:
+        return self._rack_delta
+
+    @rack_delta.setter
+    def rack_delta(self, value: int) -> None:
+        self._rack_delta = value
