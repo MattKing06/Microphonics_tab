@@ -9,9 +9,7 @@ import sys
 import time
 
 for i in range(5):
-    print('i =',i)
+    print("i =", i)
 
     time.sleep(4)
 exit
-    
-    
