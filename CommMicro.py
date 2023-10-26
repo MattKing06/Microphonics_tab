@@ -68,7 +68,7 @@ class MicDisp(Display):
 
         # link up to the secondary display
         self.xfDisp = Display(ui_filename=getPath("MicPlot.ui"))
-
+        self.checkboxes = [self.ui.cb1, self.ui.cb2, self.ui.cb3, self.ui.cb4]
         # create plot canvases and link to GUI elements
         topPlot = MplCanvas(self, width=20, height=40, dpi=100)
         botPlot = MplCanvas(self, width=20, height=40, dpi=100)
@@ -84,6 +84,13 @@ class MicDisp(Display):
         # call function plotWindow when printPushButton is pressed
         self.xfDisp.ui.printPushButton.clicked.connect(self.plotWindow)
 
+        # call function if cavity select combo box changes
+        self.ui.CavComboBox.activated.connect(self.ChangeCav)
+        self.ui.CMComboBox.currentTextChanged.connect(self.update_cmid)
+        self.ui.CavComboBox.currentIndexChanged.connect(self.update_cavity)
+        self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
+        self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
+
         # get CM IDs from FFt_math
         self.CM_IDs = FFt_math.CM_IDs()
 
@@ -94,15 +101,14 @@ class MicDisp(Display):
         self.ui.CavComboBox.addItem("Cavities 5-8")
 
         # start out with cavities 1-4 selected
-        self.checkboxes = [self.ui.cb1, self.ui.cb2, self.ui.cb3, self.ui.cb4]
         for idx, cb in enumerate(self.checkboxes):
             cb.setText(str(idx + 1))
 
         # check the first box so there's Something
-        self.ui.cb1.setChecked(True)
-        # call function if cavity select combo box changes
+        self.ui.cb1.setChecked(True)        # call function if cavity select combo box changes
         self.ui.CavComboBox.activated.connect(self.ChangeCav)
-
+        self.ui.CMComboBox.currentTextChanged.connect(self.update_cmid)
+        self.ui.CavComboBox.currentIndexChanged.connect(self.update_cavity)
         self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
         self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
         self.update_daq_setting()
@@ -117,18 +123,27 @@ class MicDisp(Display):
             BUFFER_LENGTH * decimation_num * number_of_buffers / DEFAULT_SAMPLING_RATE
         )
 
-    def ChangeCav(self):
+    def update_cmid(self, cmid: str) -> None:
+        self.model.user_arguments.cryomodule_id = cmid
+        self.model.user_arguments.linac = cmid.split(":")[1]
+        self.model.user_arguments.cryomodule = cmid.split(":")[2]
+        print(self.model.user_arguments.__dict__)
+
+    def update_cavity(self, rack_index: int) -> None:
         #   This function responds to a user changing the cavity combo box
         #    from cavs 1-4 to cavs 5-8
-        cavs = self.ui.CavComboBox.currentIndex()
-        if cavs == 0:
-            delta = 1
-        else:
+        delta = 1
+        if rack_index != 0:
             delta = 5
         for idx, cb in enumerate(self.checkboxes):
             cb.setText(str(idx + delta))
+        self.model.user_arguments.rack = rack_index
+        self.model.user_arguments.rack_delta = delta
 
-    # This function takes given data (cavUno) and axis handle (tPlot) and calculates FFT and plots
+    def ChangeCav(self):
+        pass
+
+    # This function takes given data (cavUno) and axis handle (tPlot) and calcu        # This function lates FFT and plots
     def FFTPlot(self, bPlot, cavUno):
 
         num_points = len(cavUno)
@@ -145,62 +160,23 @@ class MicDisp(Display):
     def getUserVal(self):
         # I don't get why I need the global declaration
         global LASTPATH
-
-        # cavNumA/B are '1 2 3 4' with spaces in between for
-        #  script call
-        # cavNumStr is '1234' for filename
-        cavNumList = []
-        cavNumStr = ""
-
-        # get CM id from comboBox
-        cmid = self.ui.CMComboBox.currentText()
-        self.model.user_arguments.cryomodule_id = self.ui.CMComboBox.currentText()
-
-        # grab the LxB part
-        linac = cmid.split(":")[1]
-        self.model.user_arguments.linac = self.model.user_arguments.cryomodule_id.split(
-            ":"
-        )[1]
-        # grab the CM number
-        cmNumStr = cmid.split(":")[2]
-        self.model.user_arguments.cryomodule = (
-            self.model.user_arguments.cryomodule_id.split(":")[2]
-        )
-        # read which rack - 0=A, 1=B
-        rack = self.ui.CavComboBox.currentIndex()
-        self.model.user_arguments.rack = self.ui.CavComboBox.currentIndex()
-        self.model.user_arguments.rack_delta = (
-            5 if self.model.user_arguments.rack else 1
-        )
-        if rack == 0:
-            delta = 1
-        else:
-            delta = 5
-
         # load up cavNumStr ('1234') and cavNumList (['1','2','3','4'])
+
+        # we only want to do this on button-click, not constantly.
         for idx, cb in enumerate(self.checkboxes):
             if cb.isChecked():
                 cav_num = str(idx + self.model.user_arguments.rack_delta)
-                cavNumStr += str(idx + delta)
                 self.model.user_arguments.cavity_number_str += cav_num
-                cavNumList += str(idx + delta)
                 self.model.user_arguments.cavity_number_list += cav_num
-
-        # Make the path name to be nice
-        #        LASTPATH=DATA_DIR_PATH+'ACCL_'+liNac+'_'+cmNumStr+cavNumStr[0]+'0'
-        LASTPATH = path.join(DATA_DIR_PATH, "ACCL_" + linac + "_" + cmNumStr + "00")
-        self.model.save_location = path.join(
-            self.model.save_root_location, "ACCL_" + linac + "_" + cmNumStr + "00"
-        )
-        # get today's date as 2- or 4-char strings
-        year = str(self.startd.year)
-        month = "%02d" % self.startd.month
-        day = "%02d" % self.startd.day
-        LASTPATH = path.join(LASTPATH, year, month, day)
-        self.model.save_location = path.join(self.model.save_location, year, month, day)
+        self.model.set_new_location()
+        LASTPATH = self.model.save_location
         print("User Args: ", self.model.user_arguments.__dict__)
-        print("** ", LASTPATH == self.model.save_location)
-        return linac, cmNumStr, cavNumStr
+        print(self.model.save_location)
+        return (
+            self.model.user_arguments.linac,
+            self.model.user_arguments.cryomodule,
+            self.model.user_arguments.cavity_number_str,
+        )
 
     # setGOVal is the response to the Get New Measurement button push
     # it takes GUI settings and calls python script to fetch the data

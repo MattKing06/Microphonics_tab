@@ -4,6 +4,9 @@ from datetime import datetime
 
 class UserArgs:
     def __init__(self):
+        # cavNumA/B are '1 2 3 4' with spaces in between for
+        #  script call
+        # cavNumStr is '1234' for filename
         self._cavity_number_str = ""
         self._cavity_number_list = list()
         self._cryomodule_str = ""
@@ -123,15 +126,18 @@ class Model:
         ]
 
     @property
+    def start_date(self) -> datetime:
+        return self._start_date
+    @property
     def save_location(self):
         return self._save_location
 
     @save_location.setter
     def save_location(self, path: str):
         # if not os.path.exists(path):
-            # raise FileNotFoundError(
-                # f"Could not find {path}, save location not updated."
-            # )
+        # raise FileNotFoundError(
+        # f"Could not find {path}, save location not updated."
+        # )
         self._save_location = path
 
     @property
@@ -140,8 +146,26 @@ class Model:
 
     @save_root_location.setter
     def save_root_location(self, path: str):
-        #if not os.path.exists(path):
+        # if not os.path.exists(path):
         #    raise FileNotFoundError(
         #        f"Could not find {path}, save root location not updated."
         #    )
         self._save_root_location = path
+
+    def set_new_location(self):
+        # Make the path name to be nice:
+        # LASTPATH=DATA_DIR_PATH+'ACCL_'+liNac+'_'+cmNumStr+cavNumStr[0]+'0'
+        self.save_location = os.path.join(
+            self.save_root_location,
+            "ACCL_"
+            + self.user_arguments.linac
+            + "_"
+            + self.user_arguments.cryomodule
+            + "00",
+        )
+        # get today's date as 2- or 4-char strings
+        year = str(self.start_date.year)
+        month = "%02d" % self.start_date.month
+        day = "%02d" % self.start_date.day
+        self.save_location = os.path.join(self.save_location, year, month, day)
+
