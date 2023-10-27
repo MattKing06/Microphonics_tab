@@ -193,13 +193,13 @@ class DAQProcess:
     ):
         self._args = [
             "python",
-            self._script,
+            str(self._script),
             "-D",
             str(out_location),
             "-a",
-            ca_command,
+            str(ca_command),
             "-wsp",
-            decimation,
+            str(decimation),
             "-acav",
         ]
         for cavity_number in cavities:
@@ -208,9 +208,9 @@ class DAQProcess:
             "-ch",
             "DF",
             "-c",
-            buffer_number,
+            str(buffer_number),
             "-F",
-            outfile,
+            str(outfile),
         ]
 
     def run(self):
@@ -273,10 +273,10 @@ class UserArgs:
         self._cryomodule_str = ""
         self._cmid = ""
         self._linac = ""
-        self._rack = -1
-        self._rack_delta = -1
-        self._n_buffers = -1
-        self._decimation = -1
+        self._rack = 0
+        self._rack_delta = 0
+        self._n_buffers = 0
+        self._decimation = 0
 
     @property
     def cavity_number_str(self) -> str:

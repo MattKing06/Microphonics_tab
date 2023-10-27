@@ -271,7 +271,6 @@ class MicDisp(Display):
             # err = err.decode(sys.stdin.encoding)
             # print("Out: {}".format(out))
             self.model.run()
-
             self.ui.label_message.setText("{}".format(self.model.daq.output))
             self.ui.label_message.repaint()
 
