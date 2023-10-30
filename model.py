@@ -3,7 +3,7 @@ from math import log2, floor, ceil
 import os
 import subprocess
 import sys
-from typing import Union
+from typing import Union, List
 
 
 BUFFER_LENGTH = 16384
@@ -129,6 +129,9 @@ class Model:
         self._output_filename = file
 
     def set_new_outfile(self):
+        # Need to make output file name
+        # Sergio had res_cav#_c#_yyyymmdd_hhmmss
+        # Go to res_cm##_cav####_c#_yyyymmdd_hhmmsss
         timestamp = datetime.now().strftime("%Y%m%d" + "_" + "%H%M%S")
         self.outfile_name = (
             "res_CM"
@@ -153,6 +156,7 @@ class Model:
             + "00",
         )
         # get today's date as 2- or 4-char strings
+        # /u1/lcls/physics/rf_lcls2/microphonics/ACCL_L0B_0100/yyyy/mm/dd/
         year = str(self.start_date.year)
         month = "%02d" % self.start_date.month
         day = "%02d" % self.start_date.day
@@ -176,6 +180,52 @@ class Model:
             buffer_number=self.user_arguments.num_buffers,
             outfile=self.outfile_name,
         )
+
+    def _read_cavity_datafile(self, filename: str) -> List[str]:
+        header_Data = []
+        with open(filename) as f:
+            # watch for line to start with # ACCL
+            lini = f.readline()
+            while "ACCL" not in lini:
+                header_Data.append(lini)
+                lini = f.readline()
+            next(f)
+            next(f)
+            # append the # ACCL line to the header
+            header_Data.append(lini)
+            read_data = f.readlines()
+        #   debugging
+        #    print('read_data[0:2]')
+        #    print(read_data[0:5])
+        return (read_data, header_Data)
+
+    def parse_cavity_dataset(self, filename):
+        cavity_data, _ = self._read_cavity_datafile(filename)
+        cavDat1 = []
+        cavDat2 = []
+        cavDat3 = []
+        cavDat4 = []
+        for red in cavity_data:
+            cavDat1.append(float(red[0:8]))
+            try:
+                if red[10:18] != "":
+                    cavDat2.append(float(red[10:18]))
+                if red[20:28] != "":
+                    cavDat3.append(float(red[20:28]))
+                if red[30:38] != "":
+                    cavDat4.append(float(red[30:38]))
+            except:
+                pass
+
+        # print(cavDat3)
+        #    print('cavDat1[0:5]')
+        #    print(cavDat1[0:5])
+        #    print('cavDat2[0:5]')
+        #    print(cavDat2[0:5])
+        #    print('cavDat3[0:5]')
+        #    print(cavDat3[0:5])
+
+        return [cavDat1, cavDat2, cavDat3, cavDat4]
 
 
 class DAQProcess:
