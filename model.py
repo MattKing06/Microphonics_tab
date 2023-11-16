@@ -6,11 +6,18 @@ import sys
 from typing import Union, List
 
 
-BUFFER_LENGTH = 16384
-DEFAULT_SAMPLING_RATE = 2000
+BUFFER_LENGTH = 16384  # Default number of samples in buffer
+DEFAULT_SAMPLING_RATE = 2000  # Default number of samples to take
 
 
 class Model:
+    """Performs Microphonics Data Collection using external Python script
+
+    Running the scripts and constructing arguments is handled by DAQProcess class.
+    Storing the arguments for DAQProcess is handled by UserArgs class.
+    Model class is provided to combine both UserArgs and DAQProcess.
+    """
+
     def __init__(self):
         self.name = "model"
         self.user_arguments = UserArgs()
@@ -22,10 +29,12 @@ class Model:
 
     @property
     def sampling_rate(self) -> float:
+        """Estimated Sample rate of DAQProcess"""
         return DEFAULT_SAMPLING_RATE / self.user_arguments.decimation_amount
 
     @property
     def acquire_time(self):
+        """Estimated of time it will take to complete DAQProcess"""
         return (
             BUFFER_LENGTH
             * self.user_arguments.decimation_amount
@@ -34,23 +43,28 @@ class Model:
         )
 
     @property
-    def process_return_code(self):
-        return self._process_return_code
+    def process_return_code(self) -> int:
+        """Return-code from DAQProcess"""
+        return self.daq.return_code
 
     @property
-    def process_output(self):
-        return self._process_output
+    def process_output(self) -> str:
+        """Std-out ouput from DAQProcess"""
+        return self.daq.output
 
     @property
-    def process_err(self):
-        return self._process_err
+    def process_err(self) -> str:
+        """Std-error ouput from DAQProcess"""
+        return self.daq.error
 
     def run(self):
-        self.daq.construct_args()
+        """Contructs the arguments for DAQProcess and runs the script using UserArgs"""
+        self.construct_args()
         self.daq.run()
 
     @property
     def cryomodules(self) -> list:
+        """The possible cryomdules to run DAQProcess with."""
         # CMID = <SC linac> : <CM ID>
         return [
             "ACCL:L0B:01",
@@ -94,14 +108,17 @@ class Model:
 
     @property
     def start_date(self) -> datetime:
+        """The datetime when DAQProcess started."""
         return self._start_date
 
     @property
     def save_location(self):
+        """The sub-folder in which data files from DAQProcess will be stored."""
         return self._save_location
 
     @save_location.setter
     def save_location(self, path: str):
+        """Sets the sub-folder in which data files from DAQProcess will be stored."""
         # if not os.path.exists(path):
         # raise FileNotFoundError(
         # f"Could not find {path}, save location not updated."
@@ -110,10 +127,12 @@ class Model:
 
     @property
     def save_root_location(self):
+        """The root location for data files generated from DAQProcess to be stored."""
         return self._save_root_location
 
     @save_root_location.setter
     def save_root_location(self, path: str):
+        """Set the root location for data files generated from DAQProcess to be stored."""
         # if not os.path.exists(path):
         #    raise FileNotFoundError(
         #        f"Could not find {path}, save root location not updated."
@@ -122,13 +141,16 @@ class Model:
 
     @property
     def outfile_name(self) -> str:
+        """The filename that is used to store data generated from DAQProcess"""
         return self._output_filename
 
     @outfile_name.setter
     def outfile_name(self, file: str):
+        """Sets the filename that is used to store data generated from DAQProcess"""
         self._output_filename = file
 
     def set_new_outfile(self):
+        """Sets outfile_name to a new filename used in DAQProcess to store data"""
         # Need to make output file name
         # Sergio had res_cav#_c#_yyyymmdd_hhmmss
         # Go to res_cm##_cav####_c#_yyyymmdd_hhmmsss
@@ -145,8 +167,9 @@ class Model:
         )
 
     def set_new_location(self):
+        """Generates a new path used in DAQProcess to store data"""
         # Make the path name to be nice:
-        # LASTPATH=DATA_DIR_PATH+'ACCL_'+liNac+'_'+cmNumStr+cavNumStr[0]+'0'
+        # LASTPATH=DATA_DIR_PATH+'ACCL_'+linac+'_'+cmNumStr+cavNumStr[0]+'0'
         self.save_location = os.path.join(
             self.save_root_location,
             "ACCL_"
@@ -163,6 +186,7 @@ class Model:
         self.save_location = os.path.join(self.save_location, year, month, day)
 
     def construct_args(self):
+        """Construct the CA command for DAQ, as well as other Microphonics DAQ script args using UserArgs"""
         caCmd = (
             "ca://ACCL:"
             + self.user_arguments.linac
@@ -229,6 +253,8 @@ class Model:
 
 
 class DAQProcess:
+    """Constructs arguments (see UserArgs) needed for DAQ script and runs script in subprocess"""
+
     def __init__(self):
         self._return_code = 0
         self._output = ""
@@ -241,6 +267,10 @@ class DAQProcess:
     def construct_args(
         self, out_location, ca_command, decimation, cavities, buffer_number, outfile
     ):
+        """
+        Constructs all of the arguments provided for the DAQ script to run.
+        Recommended to call this prior to the run function.
+        """
         self._args = [
             "python",
             str(self._script),
@@ -254,7 +284,7 @@ class DAQProcess:
         ]
         for cavity_number in cavities:
             self._args += str(cavity_number)
-        self.args += [
+        self._args += [
             "-ch",
             "DF",
             "-c",
@@ -264,6 +294,10 @@ class DAQProcess:
         ]
 
     def run(self):
+        """
+        Spawn a subprocess to run the DAQ Process script with arguments.
+        Stores the return code, output, and error as members variables
+        """
         process = subprocess.Popen(
             self.args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
@@ -276,14 +310,17 @@ class DAQProcess:
 
     @property
     def return_code(self):
+        """The return code from the subprocess generated in run"""
         return self._return_code
 
     @property
     def output(self):
+        """The std-output from the subprocess generated in run()"""
         return self._output
 
     @output.setter
     def output(self, value: Union[str, bytes]) -> None:
+        """Set the output from the subprocess generated in run()"""
         if isinstance(value, bytes):
             self._output = value.decode(sys.stdin.encoding)
         elif isinstance(value, str):
@@ -291,10 +328,12 @@ class DAQProcess:
 
     @property
     def error(self) -> str:
+        """The std-error from the subprocess generated in run()"""
         return self._error
 
     @error.setter
     def error(self, value: Union[str, bytes]) -> None:
+        """Set the std-error from the subprocess generated in run()"""
         if isinstance(value, bytes):
             self._error = value.decode(sys.stdin.encoding)
         elif isinstance(value, str):
@@ -302,18 +341,23 @@ class DAQProcess:
 
     @property
     def script(self) -> str:
+        """The script used for the subprocess in run()"""
         return self._script
 
     @property
     def args(self) -> list:
+        """The arguments for the script used for the subprocess in run()"""
         return self._args
 
     @args.setter
     def args(self, args: list) -> None:
+        """Set the arguments for the script used for the subprocess in run()"""
         self._args = args
 
 
 class UserArgs:
+    """The arguments that are used to perform DAQProcess"""
+
     def __init__(self):
         # cavNumA/B are '1 2 3 4' with spaces in between for
         #  script call
@@ -326,84 +370,117 @@ class UserArgs:
         self._rack = 0
         self._rack_delta = 0
         self._n_buffers = 0
-        self._decimation = 0
+        self._decimation = 1
+        self._allowed_rack_numbers = [0, 1]
 
     @property
     def cavity_number_str(self) -> str:
+        """Selected cavity number as a string (used in DAQProcess)"""
         return self._cavity_number_str
 
     @cavity_number_str.setter
     def cavity_number_str(self, value: str) -> None:
+        """Set the cavity number string (used in DAQProcess)"""
         self._cavity_number_str = value
 
     @property
     def cavity_number_list(self) -> list:
+        """Selected cavity numbers"""
         return self._cavity_number_list
 
     @cavity_number_list.setter
     def cavity_number_list(self, value: list) -> None:
+        """Set the cavity numbers"""
         self._cavity_number_list = value
 
     @property
     def cryomodule(self) -> str:
+        """Selected cryomodule as a string (used in DAQProcess)"""
         return self._cryomodule_str
 
     @cryomodule.setter
     def cryomodule(self, value: str) -> None:
+        """Set the cryomodule string (used in DAQProcess)"""
         self._cryomodule_str = value
 
     @property
     def cryomodule_id(self) -> str:
+        """The cryomodule ID (i.e. ACCL:L3B:20)"""
         return self._cmid
 
     @cryomodule_id.setter
     def cryomodule_id(self, value: str) -> None:
+        """Set the cryomodule ID"""
+        # list of cryomodules provided in Model.cryomodules
         self._cmid = value
 
     @property
     def num_buffers(self) -> str:
+        """Number of buffers to use in DAQProcess"""
         return self._n_buffers
 
     @num_buffers.setter
     def num_buffers(self, value: str) -> None:
+        """Set the number of buffers to use in DAQProcess"""
         self._n_buffers = value
 
     @property
     def decimation_amount(self):
+        """The amount of decimation used in DAQProcess"""
         return self._decimation
 
     @decimation_amount.setter
     def decimation_amount(self, value):
+        """Set the amount of decimation used in DAQProcess"""
         # only powers of 2.
         if ceil(log2(value)) != floor(log2(value)):
-            print("Only able to set decimation to powers of 2.")
+            print(
+                "Only able to set decimation to powers of 2. Keeping decimation as ",
+                self._decimation,
+            )
             return
         self._decimation = value
 
     @property
     def linac(self) -> str:
+        """The linac that is used in DAQProcess"""
         return self._linac
 
     @linac.setter
     def linac(self, value: str) -> None:
+        """Set the linac that is used in DAQProcess"""
         self._linac = value
 
     @property
     def rack(self) -> int:
+        """The rack that data is collected from in DAQProcess (0, 1) = (A, B)"""
         return self._rack
 
     @property
     def rack_str(self) -> str:
+        """The name for the rack that data is collected from in DAQProcess"""
+        # rack is either 1 or 0
+        # which evaluate to True, False respectively
         return "B" if self.rack else "A"
 
     @rack.setter
     def rack(self, value: int) -> None:
+        """Set rack to collect data from in DAQProcess, check all_rack_numbers for options"""
+        if value not in self._allowed_rack_numbers:
+            return print(
+                "Value of rack must be one of ",
+                self._allowed_rack_numbers,
+                ". You tried to set: ",
+                value,
+            )
         self._rack = value
 
     @property
     def rack_delta(self) -> int:
+        """Offset in cavity number depending on chosen rack (A = 0-4, B=5-9??)"""
         return self._rack_delta
 
     @rack_delta.setter
     def rack_delta(self, value: int) -> None:
+        """Set the cavity number offset for racks."""
         self._rack_delta = value
