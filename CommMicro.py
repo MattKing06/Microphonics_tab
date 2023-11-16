@@ -76,10 +76,6 @@ class MicDisp(Display):
         self.botPlot = MplCanvas(self, width=20, height=40, dpi=100)
         self.xfDisp.ui.PlotTop.addWidget(self.topPlot)
         self.xfDisp.ui.PlotBot.addWidget(self.botPlot)
-        self.model.user_arguments.num_buffers = self.ui.spinBox_buffers.value()
-        self.model.user_arguments.decimation_amount = int(
-            self.ui.comboBox_decimation.currentText()
-        )
         self.ui.label_samplingrate.setNum(self.model.sampling_rate)
         self.ui.label_acq_time.setNum(self.model.acquire_time)
         # fill combo boxes
@@ -117,6 +113,10 @@ class MicDisp(Display):
         self.update_number_of_buffers(self.ui.spinBox_buffers.value())
         self.update_decimation_amount(self.ui.comboBox_decimation.currentText())
         self.update_cmid(self.ui.CMComboBox.currentText())
+        self.model.user_arguments.num_buffers = self.ui.spinBox_buffers.value()
+        self.model.user_arguments.decimation_amount = int(
+            self.ui.comboBox_decimation.currentText()
+        )
         self.model.save_root_location = DATA_DIR_PATH
         self.model.save_location = LASTPATH
 
@@ -148,7 +148,6 @@ class MicDisp(Display):
 
     # This function takes given data (cavUno) and axis handle (tPlot) and calculates FFT and plots
     def FFTPlot(self, bPlot, cavUno):
-
         num_points = len(cavUno)
         sample_spacing = 1.0 / (
             DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText())
@@ -244,8 +243,8 @@ class MicDisp(Display):
         return ()
 
     # This function prompts the user for a file with data to plot
-    #  then calls getDataBack to plot it to axes tPlot and bPlot
-    #  The inputs of tPlot and bPlot are passed through to getDataBack
+    # then calls getDataBack to plot it to axes tPlot and bPlot
+    # The inputs of tPlot and bPlot are passed through to getDataBack
 
     def getOldData(self, tPlot, bPlot):
         # clear message box in case there's anything still there
@@ -271,7 +270,6 @@ class MicDisp(Display):
     #  a waterfall plot to axis tPlot and an FFT to axis bPlot
 
     def getDataBack(self, fname, tPlot, bPlot):
-
         cavDataList = []
 
         if path.exists(fname):

@@ -13,7 +13,6 @@ cmd = ["python", "-u", "/home/user/tutorial/GitDir/Microphonics/Testy2.py"]
 
 
 try:
-
     process = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, shell=False
     )

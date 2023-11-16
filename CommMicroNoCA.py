@@ -132,13 +132,11 @@ class MicDisp(Display):
         cavity = cavNumA + cavNumB
         #        print(lastPath[45:47],lastPath[47:48])                                                       # cmNumSt is a string of the cm number. cavNumA & B are strings of cavities chec$
         if lastPath[45:47] == cmNumSt and lastPath[47:48] == cavity[0:1]:
-
             self.getDataBack(ac)
 
         elif (
             len(cavNumA) + len(cavNumB)
         ) == 2:  # If sum of len of cavity num strings is 2, one of the strings has a cavity numb$
-
             timMeas = self.ui.spinBox.value()  # Get time for measurement from spinBox
             count = timMeas + 30
             self.ui.AcqProg.setText(
@@ -188,7 +186,6 @@ class MicDisp(Display):
             cmd = ["python", "-u", "Testy2.py"]
 
             try:
-
                 process = subprocess.Popen(
                     cmd,
                     stdout=subprocess.PIPE,
@@ -241,7 +238,6 @@ class MicDisp(Display):
         #        with listdir(lastPath) as dirs:
         dirs = listdir(lastPath)
         for entry in dirs:
-
             FilePlusPath = lastPath + "/" + entry
             #            print(FilePlusPath)
             dFDat, throwAway = FFt_math.readCavDat(FilePlusPath)

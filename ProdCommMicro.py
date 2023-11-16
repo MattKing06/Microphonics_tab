@@ -141,7 +141,6 @@ class MicDisp(Display):
             if (
                 len(cavNumA) + len(cavNumB)
             ) == 2:  # If sum of len of cavity num strings is 2, one of the strings has a cavity numb$
-
                 timMeas = (
                     self.ui.spinBox.value()
                 )  # Get time for measurement from spinBox
@@ -242,7 +241,6 @@ class MicDisp(Display):
         #        print("dirs = ",dirs)
         if dirs != []:
             for entry in dirs:
-
                 FilePlusPath = lastPath + "/" + entry
                 dFDat, throwAway = FFt_math.readCavDat(FilePlusPath)
                 cavDat1, cavDat2, cavDat3, cavDat4 = FFt_math.parseCavDat(dFDat)
